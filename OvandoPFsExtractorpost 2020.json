@@ -1,0 +1,450 @@
+{
+  "name": "OvandoPFsExtractor",
+  "nodes": [
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "triggerOn": "specificFolder",
+        "folderToWatch": {
+          "__rl": true,
+          "value": "1u82cpiMXmEaWm5KZo_GpB-44HQnUokCS",
+          "mode": "list",
+          "cachedResultName": "pfClientes",
+          "cachedResultUrl": "https://drive.google.com/drive/folders/1u82cpiMXmEaWm5KZo_GpB-44HQnUokCS"
+        },
+        "event": "fileCreated",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleDriveTrigger",
+      "typeVersion": 1,
+      "position": [
+        220,
+        60
+      ],
+      "id": "794b1219-4172-4b89-962c-5852f3877cca",
+      "name": "Google Drive Trigger",
+      "notesInFlow": false,
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "qq0UKiSkVxjnKrGJ",
+          "name": "ventas.lrodriguezmDriveAcc"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": {
+          "__rl": true,
+          "value": "={{ $('Google Drive Trigger').item.json.id }}",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        660,
+        60
+      ],
+      "id": "327838b7-fe49-4b7e-90e4-3330d9f6b204",
+      "name": "Google Drive",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "qq0UKiSkVxjnKrGJ",
+          "name": "ventas.lrodriguezmDriveAcc"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        440,
+        60
+      ],
+      "id": "4c4ad5ff-4824-4041-8ab4-7234b55923bb",
+      "name": "Loop Over Items"
+    },
+    {
+      "parameters": {
+        "operation": "pdf",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [
+        860,
+        60
+      ],
+      "id": "7ab84046-d396-4b62-a9ee-0af9de2f5a24",
+      "name": "Extract from File"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "9373a0a7-13d7-488b-af08-a3d25880333d",
+              "name": "text",
+              "value": "={{ $json.text }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        200,
+        320
+      ],
+      "id": "81c9aa05-c372-4161-9463-a00fa4297721",
+      "name": "Edit Fields"
+    },
+    {
+      "parameters": {
+        "jsCode": "// JavaScript para extraer información del cliente en N8N\n// Asume que el texto del documento está en $input.first().json.text\n\nconst documentText = $input.first().json.text || '';\n\n// Función para detectar el tipo de documento\nfunction detectDocumentType(text) {\n  // Detectar formato empresarial si contiene \"Nombre de la Empresa\" y \"NIT\"\n  if (text.includes('Nombre de la Empresa:') && text.includes('NIT:')) {\n    return 'empresarial';\n  }\n  // Detectar formato individual si contiene \"Nombre del Cliente:\" y \"CI:\"\n  if (text.includes('Nombre del Cliente:') && text.includes('CI:')) {\n    return 'individual';\n  }\n  return 'unknown';\n}\n\n// Función para extraer información usando expresiones regulares\nfunction extractClientInfo(text) {\n  const info = {};\n  const documentType = detectDocumentType(text);\n  \n  if (documentType === 'empresarial') {\n    // Formato empresarial (BANCO BISA)\n    \n    // Información del cliente empresarial\n    const nroClienteMatch = text.match(/Nro de Cliente:\\s*\\n(\\d+)/);\n    info.nroCliente = nroClienteMatch ? nroClienteMatch[1].trim() : '';\n    \n    const nombreEmpresaMatch = text.match(/Nombre de la Empresa:\\s*\\n(.+)/);\n    info.nombreCliente = nombreEmpresaMatch ? nombreEmpresaMatch[1].trim() : '';\n    \n    const nitMatch = text.match(/NIT:\\s*\\n(\\d+)/);\n    info.nit = nitMatch ? nitMatch[1].trim() : '';\n    \n    const facturaMatch = text.match(/Factura:\\s*\\n(.+)/);\n    info.factura = facturaMatch ? facturaMatch[1].trim() : '';\n    \n    // Teléfonos\n    const telefonos = [];\n    \n    // Teléfono de la empresa (al inicio del documento)\n    const telefonoEmpresaMatch = text.match(/Teléfono:\\s*(\\d+)/);\n    if (telefonoEmpresaMatch) {\n      telefonos.push(telefonoEmpresaMatch[1]);\n    }\n    \n    // Teléfono del cliente (en la sección de datos del cliente)\n    const telefonoClienteMatch = text.match(/Teléfono:\\s*\\n(\\d+)/);\n    if (telefonoClienteMatch) {\n      telefonos.push(telefonoClienteMatch[1]);\n    }\n    \n    info.telefono1 = telefonos[1] || telefonos[0] || '';\n    info.telefono2 = telefonos.length > 1 ? telefonos[0] : '';\n    \n    const emailMatch = text.match(/Email:\\s*\\n(.+)/);\n    info.email = emailMatch ? emailMatch[1].trim() : '';\n    \n    const direccionMatch = text.match(/Dirección:\\s*\\n(.+?)(?=\\nPersona de Contacto|$)/s);\n    info.direccion = direccionMatch ? direccionMatch[1].trim().replace(/\\n/g, ' ') : '';\n    \n    // Persona de contacto\n    const personaContactoMatch = text.match(/Persona de Contacto\\nNombre:\\nTeléfono:\\n(.+?)\\n(\\d+)/);\n    if (personaContactoMatch) {\n      info.personaContacto = personaContactoMatch[1].trim();\n      info.telefonoContacto = personaContactoMatch[2].trim();\n    }\n    \n    // Información de venta\n    const tipoVentaMatch = text.match(/Tipo de Venta:\\s*\\n(.+)/);\n    info.tipoVenta = tipoVentaMatch ? tipoVentaMatch[1].trim() : '';\n    \n    const formaPagoMatch = text.match(/Forma de pago:\\s*\\n(.+)/);\n    info.formaPago = formaPagoMatch ? formaPagoMatch[1].trim() : '';\n    \n    const fechaPedidoMatch = text.match(/Fecha de Pedido:\\s*\\n(.+)/);\n    info.fechaPedido = fechaPedidoMatch ? fechaPedidoMatch[1].trim() : '';\n    \n    const ejecutivoMatch = text.match(/Ejecutivo de Ventas:\\s*\\n(.+)/);\n    info.ejecutivoVentas = ejecutivoMatch ? ejecutivoMatch[1].trim() : '';\n    \n    const concesionarioMatch = text.match(/Concesionario:\\s*\\n(.+)/);\n    info.concesionario = concesionarioMatch ? concesionarioMatch[1].trim() : '';\n    \n    const oficinaVentasMatch = text.match(/Oficina de Ventas:\\s*\\n(.+)/);\n    info.oficinaVentas = oficinaVentasMatch ? oficinaVentasMatch[1].trim() : '';\n    \n    // Información del vehículo\n    const marcaMatch = text.match(/Marca:\\s*\\n(.+?)(?=\\nCod del Modelo|$)/);\n    info.marca = marcaMatch ? marcaMatch[1].trim() : '';\n    \n    const codModeloMatch = text.match(/Cod del Modelo:\\s*\\n(.+)/);\n    info.codModelo = codModeloMatch ? codModeloMatch[1].trim() : '';\n    \n    const chasisMatch = text.match(/CI\\/Chasis:\\s*\\n(.+)/);\n    info.chasis = chasisMatch ? chasisMatch[1].trim() : '';\n    \n    const motorMatch = text.match(/Motor:\\s*\\n(.+)/);\n    info.motor = motorMatch ? motorMatch[1].trim() : '';\n    \n    const colorExteriorMatch = text.match(/Color exterior:\\s*\\n(.+)/);\n    info.colorExterior = colorExteriorMatch ? colorExteriorMatch[1].trim() : '';\n    \n    const colorInternoMatch = text.match(/Color interno:\\s*\\n(.+)/);\n    info.colorInterno = colorInternoMatch ? colorInternoMatch[1].trim() : '';\n    \n    const añoModeloMatch = text.match(/Año Modelo:\\s*\\n(\\d+)/);\n    info.añoModelo = añoModeloMatch ? añoModeloMatch[1].trim() : '';\n    \n    const añoProduccionMatch = text.match(/Año de produccion:\\s*\\n(\\d+)/);\n    info.añoProduccion = añoProduccionMatch ? añoProduccionMatch[1].trim() : '';\n    \n    // Descripción del modelo\n    const descripcionMatch = text.match(/R281-F55\\s*\\n(.+?)\\s*\\n/);\n    info.modelo = descripcionMatch ? descripcionMatch[1].trim() : '';\n    \n    // Información de precios\n    const precioUnitarioMatch = text.match(/Precio Unitario:\\s*\\n(.+?)\\sUSD/);\n    info.precioUnitario = precioUnitarioMatch ? precioUnitarioMatch[1].trim() : '';\n    \n    const descuentoMatch = text.match(/Descuentos:\\s*\\n(.+?)\\sUSD/);\n    info.descuento = descuentoMatch ? descuentoMatch[1].trim() : '';\n    \n    const precioFinalUSDMatch = text.match(/Precio Final:\\s*\\n(.+?)\\sUSD/);\n    info.precioFinalUSD = precioFinalUSDMatch ? precioFinalUSDMatch[1].trim() : '';\n    \n    const precioFinalBOBMatch = text.match(/(\\d{1,3}(?:\\.\\d{3})*,\\d{2})\\sBOB/);\n    info.precioFinalBOB = precioFinalBOBMatch ? precioFinalBOBMatch[1].trim() : '';\n    \n    const tipoCambioMatch = text.match(/T\\/C:([0-9.,]+):/);\n    info.tipoCambio = tipoCambioMatch ? tipoCambioMatch[1].trim() : '';\n    \n  } else if (documentType === 'individual') {\n    // Formato individual (formato original)\n    \n    // Extraer información básica del cliente\n    const nombreMatch = text.match(/Nombre del Cliente:\\s*\\n(.+)/);\n    info.nombreCliente = nombreMatch ? nombreMatch[1].trim() : '';\n    \n    const ciMatch = text.match(/CI:\\s*\\n(\\d+)/);\n    info.ci = ciMatch ? ciMatch[1].trim() : '';\n    \n    const emailMatch = text.match(/Email:\\s*\\n(.+)/);\n    info.email = emailMatch ? emailMatch[1].trim() : '';\n    \n    const direccionMatch = text.match(/Dirección:\\s*\\n(.+)/);\n    info.direccion = direccionMatch ? direccionMatch[1].trim() : '';\n    \n    // Extraer ambos teléfonos\n    const telefonos = [];\n    \n    // Teléfono de la empresa (al inicio del documento)\n    const telefonoEmpresaMatch = text.match(/Teléfono:\\s*(\\d+)/);\n    if (telefonoEmpresaMatch) {\n      telefonos.push(telefonoEmpresaMatch[1]);\n    }\n    \n    // Teléfono del cliente (en la sección de datos del cliente)\n    const telefonoClienteMatch = text.match(/Teléfono:\\s*\\n(\\d+)/);\n    if (telefonoClienteMatch) {\n      telefonos.push(telefonoClienteMatch[1]);\n    }\n    \n    // Asignar teléfonos\n    info.telefono1 = telefonos[1] || ''; // Teléfono del cliente primero\n    info.telefono2 = telefonos[0] || ''; // Teléfono de la empresa segundo\n    \n    // Información de venta\n    const tipoVentaMatch = text.match(/Tipo de Venta:\\s*\\n(.+)/);\n    info.tipoVenta = tipoVentaMatch ? tipoVentaMatch[1].trim() : '';\n    \n    const formaPagoMatch = text.match(/Forma de pago:\\s*\\n(.+)/);\n    info.formaPago = formaPagoMatch ? formaPagoMatch[1].trim() : '';\n    \n    const fechaPedidoMatch = text.match(/Fecha de Pedido:\\s*\\n(.+)/);\n    info.fechaPedido = fechaPedidoMatch ? fechaPedidoMatch[1].trim() : '';\n    \n    const ejecutivoMatch = text.match(/Ejecutivo de Ventas:\\s*\\n(.+)/);\n    info.ejecutivoVentas = ejecutivoMatch ? ejecutivoMatch[1].trim() : '';\n    \n    // Información del vehículo\n    const marcaMatch = text.match(/Marca:\\s*\\n(.+?)(?=\\n|$)/);\n    info.marca = marcaMatch ? marcaMatch[1].trim() : '';\n    \n    const modeloMatch = text.match(/RENEGADE SUV SPORT 4X2 MT/);\n    info.modelo = modeloMatch ? 'RENEGADE SUV SPORT 4X2 MT' : '';\n    \n    const colorExteriorMatch = text.match(/Color exterior:\\s*\\n(.+)/);\n    info.colorExterior = colorExteriorMatch ? colorExteriorMatch[1].trim() : '';\n    \n    const añoMatch = text.match(/Año Modelo:\\s*\\n(\\d+)/);\n    info.añoModelo = añoMatch ? añoMatch[1].trim() : '';\n    \n    // Información de precios\n    const precioFinalUSDMatch = text.match(/Precio Final:\\s*\\n(.+?)\\sUSD/);\n    info.precioFinalUSD = precioFinalUSDMatch ? precioFinalUSDMatch[1].trim() : '';\n    \n    const precioFinalBOBMatch = text.match(/(\\d{1,3}(?:\\.\\d{3})*,\\d{2})\\sBOB/);\n    info.precioFinalBOB = precioFinalBOBMatch ? precioFinalBOBMatch[1].trim() : '';\n    \n    const descuentoMatch = text.match(/Descuentos:\\s*\\n(.+?)\\sUSD/);\n    info.descuento = descuentoMatch ? descuentoMatch[1].trim() : '';\n  }\n  \n  // Agregar tipo de documento detectado\n  info.tipoDocumento = documentType;\n  \n  return info;\n}\n\n// Extraer la información\nconst clientInfo = extractClientInfo(documentText);\n\n// Formatear el resultado como string legible\nlet resultadoFormateado = '';\n\nif (clientInfo.tipoDocumento === 'empresarial') {\n  resultadoFormateado = `\nTipo de Documento: Empresarial\nNro de Cliente: ${clientInfo.nroCliente || ''}\nNombre de la Empresa: ${clientInfo.nombreCliente || ''}\nNIT: ${clientInfo.nit || ''}\nFactura: ${clientInfo.factura || ''}\nTeléfono 1: ${clientInfo.telefono1 || ''}\nTeléfono 2: ${clientInfo.telefono2 || ''}\nEmail: ${clientInfo.email || ''}\nDirección: ${clientInfo.direccion || ''}\nPersona de Contacto: ${clientInfo.personaContacto || ''}\nTeléfono de Contacto: ${clientInfo.telefonoContacto || ''}\nConcesionario: ${clientInfo.concesionario || ''}\nOficina de Ventas: ${clientInfo.oficinaVentas || ''}\nTipo de Venta: ${clientInfo.tipoVenta || ''}\nForma de Pago: ${clientInfo.formaPago || ''}\nFecha de Pedido: ${clientInfo.fechaPedido || ''}\nEjecutivo de Ventas: ${clientInfo.ejecutivoVentas || ''}\nMarca: ${clientInfo.marca || ''}\nCódigo del Modelo: ${clientInfo.codModelo || ''}\nModelo/Descripción: ${clientInfo.modelo || ''}\nChasis: ${clientInfo.chasis || ''}\nMotor: ${clientInfo.motor || ''}\nColor Exterior: ${clientInfo.colorExterior || ''}\nColor Interno: ${clientInfo.colorInterno || ''}\nAño Modelo: ${clientInfo.añoModelo || ''}\nAño de Producción: ${clientInfo.añoProduccion || ''}\nPrecio Unitario: ${clientInfo.precioUnitario || ''}\nDescuento: ${clientInfo.descuento || ''}\nPrecio Final USD: ${clientInfo.precioFinalUSD || ''}\nPrecio Final BOB: ${clientInfo.precioFinalBOB || ''}\nTipo de Cambio: ${clientInfo.tipoCambio || ''}\n`.trim();\n} else if (clientInfo.tipoDocumento === 'individual') {\n  resultadoFormateado = `\nTipo de Documento: Individual\nNombre del Cliente: ${clientInfo.nombreCliente || ''}\nCI: ${clientInfo.ci || ''}\nTeléfono 1: ${clientInfo.telefono1 || ''}\nTeléfono 2: ${clientInfo.telefono2 || ''}\nEmail: ${clientInfo.email || ''}\nDirección: ${clientInfo.direccion || ''}\nTipo de Venta: ${clientInfo.tipoVenta || ''}\nForma de Pago: ${clientInfo.formaPago || ''}\nFecha de Pedido: ${clientInfo.fechaPedido || ''}\nEjecutivo de Ventas: ${clientInfo.ejecutivoVentas || ''}\nMarca: ${clientInfo.marca || ''}\nModelo: ${clientInfo.modelo || ''}\nColor Exterior: ${clientInfo.colorExterior || ''}\nAño Modelo: ${clientInfo.añoModelo || ''}\nPrecio Final USD: ${clientInfo.precioFinalUSD || ''}\nPrecio Final BOB: ${clientInfo.precioFinalBOB || ''}\nDescuento: ${clientInfo.descuento || ''}\n`.trim();\n} else {\n  resultadoFormateado = 'Formato de documento no reconocido';\n}\n\n// Retornar tanto el objeto estructurado como el texto formateado\nreturn [{\n  json: {\n    // Información estructurada para uso programático\n    clienteInfo: clientInfo,\n    \n    // Texto formateado para visualización\n    resumenFormateado: resultadoFormateado,\n    \n    // Tipo de documento detectado\n    tipoDocumento: clientInfo.tipoDocumento,\n    \n    // Campos comunes\n    nombreCliente: clientInfo.nombreCliente || '',\n    telefono1: clientInfo.telefono1 || '',\n    telefono2: clientInfo.telefono2 || '',\n    email: clientInfo.email || '',\n    direccion: clientInfo.direccion || '',\n    tipoVenta: clientInfo.tipoVenta || '',\n    formaPago: clientInfo.formaPago || '',\n    fechaPedido: clientInfo.fechaPedido || '',\n    ejecutivoVentas: clientInfo.ejecutivoVentas || '',\n    marca: clientInfo.marca || '',\n    modelo: clientInfo.modelo || '',\n    colorExterior: clientInfo.colorExterior || '',\n    añoModelo: clientInfo.añoModelo || '',\n    precioFinalUSD: clientInfo.precioFinalUSD || '',\n    precioFinalBOB: clientInfo.precioFinalBOB || '',\n    descuento: clientInfo.descuento || '',\n    \n    // Campos específicos del formato empresarial\n    nroCliente: clientInfo.nroCliente || '',\n    nit: clientInfo.nit || '',\n    factura: clientInfo.factura || '',\n    personaContacto: clientInfo.personaContacto || '',\n    telefonoContacto: clientInfo.telefonoContacto || '',\n    concesionario: clientInfo.concesionario || '',\n    oficinaVentas: clientInfo.oficinaVentas || '',\n    codModelo: clientInfo.codModelo || '',\n    chasis: clientInfo.chasis || '',\n    motor: clientInfo.motor || '',\n    colorInterno: clientInfo.colorInterno || '',\n    añoProduccion: clientInfo.añoProduccion || '',\n    precioUnitario: clientInfo.precioUnitario || '',\n    tipoCambio: clientInfo.tipoCambio || '',\n    \n    // Campos específicos del formato individual\n    ci: clientInfo.ci || ''\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        320
+      ],
+      "id": "dc613607-9475-4a61-baa1-9745e2abdea5",
+      "name": "Code"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "777e41c2-50d5-4263-8366-830d95f7b020",
+              "name": "Nombre",
+              "value": "={{ $json.clienteInfo.nombreCliente  ||  $json.clienteInfo.factura }}",
+              "type": "string"
+            },
+            {
+              "id": "bd35a26f-28f9-4668-b24b-bd807a53d631",
+              "name": "CI",
+              "value": "={{ $json.clienteInfo.ci || $json.clienteInfo.nit }}",
+              "type": "string"
+            },
+            {
+              "id": "456d5744-2b84-43bf-bddc-a3ab3537d9f2",
+              "name": "Email",
+              "value": "={{ $json.clienteInfo.email }}",
+              "type": "string"
+            },
+            {
+              "id": "2b6855fa-8e52-413f-a2de-c1b1d88feade",
+              "name": "Telefomo",
+              "value": "={{ $json.clienteInfo.telefono1 || $json.clienteInfo.telefonoContacto }}",
+              "type": "string"
+            },
+            {
+              "id": "8e05fd85-7f3a-4b0d-ad44-f6f62f23f052",
+              "name": "Tipo de venta",
+              "value": "={{ $json.clienteInfo.tipoVenta }}",
+              "type": "string"
+            },
+            {
+              "id": "ce59608b-6bd5-4210-924e-1789b5ef8709",
+              "name": "Fecha de Venta",
+              "value": "={{ $json.clienteInfo.fechaPedido }}",
+              "type": "string"
+            },
+            {
+              "id": "b5fc6ef0-318c-4c57-b095-44c2fb8d7012",
+              "name": "Modelo",
+              "value": "={{ $json.clienteInfo.modelo || $json.clienteInfo.descripcionVehiculo }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        660,
+        320
+      ],
+      "id": "4c51490b-d4f0-463e-bcad-a2522ac3653d",
+      "name": "Edit Fields1"
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "1EwIdF_TXsADcqd2-YMrb8FtYUpjYshg9IvPO81sTcU0",
+          "mode": "list",
+          "cachedResultName": "ClientesOvando",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1EwIdF_TXsADcqd2-YMrb8FtYUpjYshg9IvPO81sTcU0/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Hoja 1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1EwIdF_TXsADcqd2-YMrb8FtYUpjYshg9IvPO81sTcU0/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Nombre": "={{ $json.Nombre }}",
+            "CI": "={{ $json.CI }}",
+            "Email": "={{ $json.Email }}",
+            "Telefomo": "={{ $json.Telefomo }}",
+            "Tipo de venta": "={{ $json['Tipo de venta'] }}",
+            "Fecha de Venta": "={{ $json['Fecha de Venta'] }}",
+            "Modelo": "={{ $json.Modelo }}"
+          },
+          "matchingColumns": [
+            "Nombre"
+          ],
+          "schema": [
+            {
+              "id": "Nombre",
+              "displayName": "Nombre",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "CI",
+              "displayName": "CI",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Email",
+              "displayName": "Email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Telefomo",
+              "displayName": "Telefomo",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Tipo de venta",
+              "displayName": "Tipo de venta",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Fecha de Venta",
+              "displayName": "Fecha de Venta",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Modelo",
+              "displayName": "Modelo",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.6,
+      "position": [
+        880,
+        320
+      ],
+      "id": "4593d6fb-d678-40ad-a802-5998c2b99320",
+      "name": "Google Sheets",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "k0CxTq8rjPs9a3AK",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "deleteFile",
+        "fileId": {
+          "__rl": true,
+          "value": "={{ $('Google Drive Trigger').item.json.id }}",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        1080,
+        320
+      ],
+      "id": "d99c1cc3-37c3-4739-8d5e-434731097504",
+      "name": "Google Drive1",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "qq0UKiSkVxjnKrGJ",
+          "name": "ventas.lrodriguezmDriveAcc"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Google Drive Trigger": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Google Drive",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Drive": {
+      "main": [
+        [
+          {
+            "node": "Extract from File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract from File": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields": {
+      "main": [
+        [
+          {
+            "node": "Code",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields1": {
+      "main": [
+        [
+          {
+            "node": "Google Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Sheets": {
+      "main": [
+        [
+          {
+            "node": "Google Drive1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Drive1": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "7d7fb2b3-dba2-461d-8969-2a636f15ed9f",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "31337f76e232a9ced98e4f7953302be4474841ade01fea6c5d3a9c0385f8da76"
+  },
+  "id": "KZRaqFsGqqbbpp09",
+  "tags": []
+}
